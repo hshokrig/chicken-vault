@@ -8,7 +8,7 @@ export function SubmissionTrackerPanel({ state }: SubmissionTrackerPanelProps): 
   const players = [...state.players].sort((a, b) => a.seatIndex - b.seatIndex);
 
   return (
-    <section className="side-panel">
+    <section className="side-panel tracker-panel">
       <h3>Submission Tracker</h3>
       <div className="panel-scroll">
         {players.map((player) => {

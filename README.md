@@ -74,10 +74,11 @@ npm run dev
 2. Let current player ask one question.
 3. Press `Submit` to stop recording and analyze.
 4. Wait for `Analyzing...`.
-5. System auto-transcribes + auto-answers YES/NO and rotates turn.
-6. If result is chatter/noise, turn does not advance; repeat ASK/Submit.
-7. If current player calls vault, click `Call Vault (Current Turn)`.
-8. To reset the whole game back to Lobby at any time, press `Shift+R` (confirmation required).
+5. If voice recording exists, system analyzes voice first; typed text is used as fallback.
+6. System auto-transcribes + auto-answers YES/NO and rotates turn.
+7. If result is chatter/noise, turn does not advance; repeat ASK/Submit.
+8. If current player calls vault, click `Call Vault (Current Turn)`.
+9. To reset the whole game back to Lobby at any time, press `Shift+R` (confirmation required).
 
 ### During scoring
 
@@ -101,12 +102,14 @@ For each scoring phase:
 4. Fill exactly one guess column:
    - `SAFE`: use `Color` (column `B`) with `RED` or `BLACK`
    - `MEDIUM`: use `Suits` (column `C`) with `S`, `H`, `D`, or `C`
-   - `BOLD`: use `Number` (column `D`) as rank (`A, 2-10, J, Q, K`) and `Suits` (column `C`) as `S/H/D/C`
+   - `BOLD` (recommended): use `Number` (column `D`) as rank (`A, 2-10, J, Q, K`) and `Suits` (column `C`) as `S/H/D/C`
+   - `BOLD` (legacy accepted): full card in `Number` also works (example `QD`, `8S`)
 
 ## AI Question Flow
 
 - Audio transcription model: `gpt-4o-transcribe`
 - Question reasoning model: `gpt-5-nano` (Chat Completions with structured schema)
+- Input priority: recorded voice first, then typed fallback if voice is unavailable/unclear
 - Output contains:
   - cleaned question text
   - YES/NO answer
@@ -134,3 +137,8 @@ npm run simulate:ai-live -w @chicken-vault/server
   - Check backend logs for OpenAI errors.
 - Question keeps retrying:
   - Ask one clear card-related question in each recording.
+- `Invalid submission format`:
+  - SAFE must use `Color` only.
+  - MEDIUM must use `Suits` only.
+  - BOLD should use `Number` (rank) + `Suits`.
+  - Click `Initialize Workbook Now` after pulling latest changes so dropdowns match current format.

@@ -42,6 +42,7 @@ Recommended social rule:
 - Uses `ASK` and `Submit` only during investigation:
   - `ASK` starts microphone recording.
   - `Submit` stops recording and sends audio to AI.
+  - Voice is analyzed first when present; typed question is fallback if voice is unavailable/unclear.
   - AI transcribes and auto-resolves the question as `YES` or `NO`.
 - Moves game through investigation, scoring, reveal, next round.
 
@@ -52,6 +53,7 @@ Recommended social rule:
   - Use dropdowns in `Color`, `Suits`, `Number`, and `Level` (avoid free typing)
   - `Level` = `SAFE` / `MEDIUM` / `BOLD`
   - `Color` (SAFE only) or `Suits` (MEDIUM only) or `Number`+`Suits` (BOLD: rank + suit)
+  - Legacy compatibility: full card in `Number` (for BOLD) is still accepted
 
 ### Insider
 
@@ -81,6 +83,8 @@ Recommended social rule:
    - Turn starts clockwise from dealer marker.
    - Press `ASK`, let current player speak, then press `Submit`.
    - UI shows `Analyzing...` while AI is transcribing and deciding.
+   - If both voice and typed text exist, voice is processed first.
+   - Typed text is automatically used only as fallback when voice cannot be used.
    - If a valid question is detected, AI logs the cleaned question + `YES`/`NO` and rotates turn.
    - If chatter/noise is detected, turn does not advance and dealer retries.
    - Current turn player can call vault, or timer auto-calls.

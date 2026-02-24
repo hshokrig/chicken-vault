@@ -249,7 +249,7 @@ export function HostControls({
     const shouldProcessVoice = questionStatus === 'RECORDING';
 
     if (!typedQuestionText && !shouldProcessVoice) {
-      setQuestionFeedback('Type a question or use ASK to record one.');
+      setQuestionFeedback('Type a question or use RECORD to capture one.');
       return;
     }
 
@@ -292,7 +292,7 @@ export function HostControls({
       if (shouldProcessVoice) {
         const recorder = recorderRef.current;
         if (!recorder) {
-          setQuestionFeedback('No active recording found. Press ASK first.');
+          setQuestionFeedback('No active recording found. Press RECORD first.');
           return;
         }
 
@@ -594,26 +594,34 @@ export function HostControls({
           {state.phase === 'INVESTIGATION' && (
             <>
               <h4>Investigation</h4>
-              <p className="muted small">Dealer flow: ASK to record, then Submit. Question + answer are auto-resolved.</p>
-              <div className="inline-row">
+              <p className="muted small">Dealer flow: RECORD, then Submit. Question + answer are auto-resolved.</p>
+              <div className="question-actions">
                 <button
                   type="button"
+                  className="action-button action-record"
                   onClick={() => {
                     void startQuestionRecording();
                   }}
                   disabled={questionStatus !== 'IDLE'}
                 >
-                  ASK
+                  <span className="button-icon" aria-hidden="true">
+                    ●
+                  </span>
+                  <span>RECORD</span>
                 </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void submitRecordedQuestion();
-                    }}
-                    disabled={!canSubmitQuestion}
-                  >
-                    Submit
-                  </button>
+                <button
+                  type="button"
+                  className="action-button action-submit"
+                  onClick={() => {
+                    void submitRecordedQuestion();
+                  }}
+                  disabled={!canSubmitQuestion}
+                >
+                  <span className="button-icon" aria-hidden="true">
+                    ✓
+                  </span>
+                  <span>SUBMIT</span>
+                </button>
               </div>
               <label className="typed-question-field">
                 Typed Question (Fallback)
