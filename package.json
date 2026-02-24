@@ -1,0 +1,20 @@
+{
+  "name": "chicken-vault",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @chicken-vault/shared && concurrently -n shared,server,ui -c yellow,cyan,magenta \"npm run dev -w @chicken-vault/shared\" \"npm run dev -w @chicken-vault/server\" \"npm run dev -w @chicken-vault/host-ui\"",
+    "build": "npm run build -w @chicken-vault/shared && npm run build -w @chicken-vault/server && npm run build -w @chicken-vault/host-ui",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
