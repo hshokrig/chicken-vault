@@ -1,17 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import { Player, WorkbookAlert, WorkbookCandidate } from '@chicken-vault/shared';
 import { makePlayerSheetName, sortPlayersBySeat } from '../utils/sheets.js';
 import { nowIso, wait } from '../utils/time.js';
 
 interface RawSheetSubmission {
-  scoringStatus: string;
-  roundCode: string;
   currentRound: number | null;
+  color: string;
+  suit: string;
+  number: string;
   level: string;
-  guess: string;
-  submit: string;
   acceptedAt: string;
   validationMessage: string;
 }
@@ -25,20 +25,127 @@ export interface WorkbookWriteOptions {
   ackWritesEnabled: boolean;
 }
 
-function getCellString(sheet: XLSX.WorkSheet | undefined, address: string): string {
-  if (!sheet?.[address]) {
-    return '';
-  }
-  return String(sheet[address].v ?? '').trim();
+const HEADER_ROW = 1;
+const FIRST_DATA_ROW = 2;
+const COL_ROUND = 1;
+const COL_COLOR = 2;
+const COL_SUIT = 3;
+const COL_NUMBER = 4;
+const COL_LEVEL = 5;
+const EXPECTED_HEADERS = ['Round', 'Color', 'Suits', 'Number', 'Level'] as const;
+const MAX_DROPDOWN_ROW = 300;
+const COLOR_OPTIONS = ['RED', 'BLACK'] as const;
+const SUIT_OPTIONS = ['S', 'H', 'D', 'C'] as const;
+const LEVEL_OPTIONS = ['SAFE', 'MEDIUM', 'BOLD'] as const;
+const RANK_OPTIONS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const;
+
+function listFormula(options: readonly string[]): string {
+  return `"${options.join(',')}"`;
 }
 
-function getCellNumber(sheet: XLSX.WorkSheet | undefined, address: string): number | null {
-  const value = getCellString(sheet, address);
-  if (!value) {
+function applyListValidation(params: {
+  sheet: ExcelJS.Worksheet;
+  col: number;
+  options: readonly string[];
+  title: string;
+  message: string;
+}): void {
+  const { sheet, col, options, title, message } = params;
+  for (let row = FIRST_DATA_ROW; row <= MAX_DROPDOWN_ROW; row += 1) {
+    sheet.getCell(row, col).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      showErrorMessage: true,
+      errorTitle: title,
+      error: message,
+      formulae: [listFormula(options)]
+    };
+  }
+}
+
+function ensurePlayerSheetStructureExcel(sheet: ExcelJS.Worksheet): void {
+  EXPECTED_HEADERS.forEach((header, index) => {
+    sheet.getCell(HEADER_ROW, index + 1).value = header;
+  });
+
+  applyListValidation({
+    sheet,
+    col: COL_COLOR,
+    options: COLOR_OPTIONS,
+    title: 'Invalid Color',
+    message: 'Select RED or BLACK from the dropdown.'
+  });
+  applyListValidation({
+    sheet,
+    col: COL_SUIT,
+    options: SUIT_OPTIONS,
+    title: 'Invalid Suits',
+    message: 'Select S, H, D, or C from the dropdown.'
+  });
+  applyListValidation({
+    sheet,
+    col: COL_NUMBER,
+    options: RANK_OPTIONS,
+    title: 'Invalid Number',
+    message: 'Select a rank only (A, 2-10, J, Q, K) from the dropdown.'
+  });
+  applyListValidation({
+    sheet,
+    col: COL_LEVEL,
+    options: LEVEL_OPTIONS,
+    title: 'Invalid Level',
+    message: 'Select SAFE, MEDIUM, or BOLD from the dropdown.'
+  });
+}
+
+function cellAddress(row: number, col: number): string {
+  return XLSX.utils.encode_cell({ r: row - 1, c: col - 1 });
+}
+
+function getCellString(sheet: XLSX.WorkSheet | undefined, row: number, col: number): string {
+  if (!sheet) {
+    return '';
+  }
+  const cell = sheet[cellAddress(row, col)];
+  if (!cell) {
+    return '';
+  }
+  return String(cell.v ?? '').trim();
+}
+
+function getCellNumber(sheet: XLSX.WorkSheet | undefined, row: number, col: number): number | null {
+  const raw = getCellString(sheet, row, col);
+  if (!raw) {
     return null;
   }
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? null : parsed;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function decodeRange(sheet: XLSX.WorkSheet): XLSX.Range {
+  if (!sheet['!ref']) {
+    return { s: { r: 0, c: 0 }, e: { r: 0, c: COL_LEVEL - 1 } };
+  }
+
+  try {
+    return XLSX.utils.decode_range(sheet['!ref']);
+  } catch {
+    return { s: { r: 0, c: 0 }, e: { r: 0, c: COL_LEVEL - 1 } };
+  }
+}
+
+function findRoundRow(sheet: XLSX.WorkSheet, roundNumber: number): number | null {
+  const range = decodeRange(sheet);
+  const maxRow = Math.max(FIRST_DATA_ROW, range.e.r + 1);
+
+  for (let row = FIRST_DATA_ROW; row <= maxRow; row += 1) {
+    const value = getCellNumber(sheet, row, COL_ROUND);
+    if (value === roundNumber) {
+      return row;
+    }
+  }
+
+  return null;
 }
 
 async function readWorkbookWithRetry(
@@ -71,9 +178,31 @@ async function readWorkbookWithRetry(
   throw new Error('Failed to read workbook');
 }
 
-async function writeWorkbookWithRetry(
+async function loadWorkbookForWriteWithRetry(workbookPath: string, maxAttempts = 4): Promise<ExcelJS.Workbook> {
+  let attempt = 0;
+  let delayMs = 200;
+
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(workbookPath);
+      return workbook;
+    } catch (error) {
+      if (attempt >= maxAttempts) {
+        throw error;
+      }
+      await wait(delayMs);
+      delayMs *= 2;
+    }
+  }
+
+  throw new Error('Failed to load workbook for write operations.');
+}
+
+async function writeWorkbookForWriteWithRetry(
   workbookPath: string,
-  workbook: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   maxAttempts = 4
 ): Promise<void> {
   let attempt = 0;
@@ -82,8 +211,9 @@ async function writeWorkbookWithRetry(
   while (attempt < maxAttempts) {
     attempt += 1;
     try {
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      await fs.writeFile(workbookPath, buffer);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+      await fs.writeFile(workbookPath, bytes);
       return;
     } catch (error: unknown) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
@@ -96,91 +226,13 @@ async function writeWorkbookWithRetry(
   }
 }
 
-function ensureCell(sheet: XLSX.WorkSheet, address: string, value: string | number): void {
-  sheet[address] = { t: typeof value === 'number' ? 'n' : 's', v: value };
-}
-
-function setSheetRange(sheet: XLSX.WorkSheet, range = 'A1:A16'): void {
-  sheet['!ref'] = range;
-}
-
-function createPlayerSheet(player: Player): XLSX.WorkSheet {
-  const sheet: XLSX.WorkSheet = {};
-  ensureCell(sheet, 'A1', 'CHICKEN VAULT — EDIT ONLY THIS SHEET');
-  ensureCell(sheet, 'A3', player.name);
-  ensureCell(sheet, 'A4', player.team);
-  ensureCell(sheet, 'A5', player.seatIndex);
-  ensureCell(sheet, 'A7', 0);
-  ensureCell(sheet, 'A8', '');
-  ensureCell(sheet, 'A9', 'CLOSED');
-  ensureCell(sheet, 'A11', '');
-  ensureCell(sheet, 'A12', '');
-  ensureCell(sheet, 'A13', '');
-  ensureCell(sheet, 'A15', '');
-  ensureCell(sheet, 'A16', '');
-  setSheetRange(sheet);
-  return sheet;
-}
-
-function upsertPlayerSheet(sheet: XLSX.WorkSheet, player: Player): XLSX.WorkSheet {
-  ensureCell(sheet, 'A1', 'CHICKEN VAULT — EDIT ONLY THIS SHEET');
-  ensureCell(sheet, 'A3', player.name);
-  ensureCell(sheet, 'A4', player.team);
-  ensureCell(sheet, 'A5', player.seatIndex);
-  if (!sheet['A7']) {
-    ensureCell(sheet, 'A7', 0);
-  }
-  if (!sheet['A8']) {
-    ensureCell(sheet, 'A8', '');
-  }
-  if (!sheet['A9']) {
-    ensureCell(sheet, 'A9', 'CLOSED');
-  }
-  if (!sheet['A11']) {
-    ensureCell(sheet, 'A11', '');
-  }
-  if (!sheet['A12']) {
-    ensureCell(sheet, 'A12', '');
-  }
-  if (!sheet['A13']) {
-    ensureCell(sheet, 'A13', '');
-  }
-  if (!sheet['A15']) {
-    ensureCell(sheet, 'A15', '');
-  }
-  if (!sheet['A16']) {
-    ensureCell(sheet, 'A16', '');
-  }
-  setSheetRange(sheet);
-  return sheet;
-}
-
-async function loadWorkbookOrCreate(workbookPath: string): Promise<XLSX.WorkBook> {
-  try {
-    const { workbook } = await readWorkbookWithRetry(workbookPath, 2);
-    return workbook;
-  } catch {
-    return XLSX.utils.book_new();
-  }
-}
-
-function removeLegacyPlayerSheets(workbook: XLSX.WorkBook): void {
-  const playerSheets = workbook.SheetNames.filter((sheetName) => /^P\d{2}_/.test(sheetName));
-  for (const sheetName of playerSheets) {
-    delete workbook.Sheets[sheetName];
-  }
-  workbook.SheetNames = workbook.SheetNames.filter((sheetName) => !/^P\d{2}_/.test(sheetName));
-}
-
 export async function initializeWorkbookForPlayers(params: {
   workbookPath: string;
   players: Player[];
 }): Promise<Player[]> {
   const { workbookPath, players } = params;
-  const workbook = await loadWorkbookOrCreate(workbookPath);
+  const workbook = await loadWorkbookForWriteWithRetry(workbookPath);
   const sorted = sortPlayersBySeat(players);
-
-  removeLegacyPlayerSheets(workbook);
 
   const used = new Set<string>();
   const updatedPlayers = sorted.map((player) => {
@@ -191,16 +243,17 @@ export async function initializeWorkbookForPlayers(params: {
     };
   });
 
-  for (const player of updatedPlayers) {
-    const existing = workbook.Sheets[player.sheetName];
-    const sheet = existing ? upsertPlayerSheet(existing, player) : createPlayerSheet(player);
-    workbook.Sheets[player.sheetName] = sheet;
-    if (!workbook.SheetNames.includes(player.sheetName)) {
-      workbook.SheetNames.push(player.sheetName);
-    }
+  // Full reset on initialize: delete every existing tab and recreate only player tabs.
+  for (const worksheet of [...workbook.worksheets]) {
+    workbook.removeWorksheet(worksheet.id);
   }
 
-  await writeWorkbookWithRetry(workbookPath, workbook);
+  for (const player of updatedPlayers) {
+    const sheet = workbook.addWorksheet(player.sheetName);
+    ensurePlayerSheetStructureExcel(sheet);
+  }
+
+  await writeWorkbookForWriteWithRetry(workbookPath, workbook);
   return updatedPlayers;
 }
 
@@ -210,50 +263,58 @@ export async function prepareScoringRound(params: {
   roundNumber: number;
   roundCode: string;
 }): Promise<void> {
-  const { workbookPath, players, roundNumber, roundCode } = params;
-  const workbook = await loadWorkbookOrCreate(workbookPath);
+  const { workbookPath, players, roundNumber } = params;
+  const workbook = await loadWorkbookForWriteWithRetry(workbookPath);
 
   for (const player of players) {
-    const existing = workbook.Sheets[player.sheetName];
-    const sheet = existing ? upsertPlayerSheet(existing, player) : createPlayerSheet(player);
-    ensureCell(sheet, 'A7', roundNumber);
-    ensureCell(sheet, 'A8', roundCode);
-    ensureCell(sheet, 'A9', 'OPEN');
-    ensureCell(sheet, 'A11', '');
-    ensureCell(sheet, 'A12', '');
-    ensureCell(sheet, 'A13', '');
-    ensureCell(sheet, 'A15', '');
-    ensureCell(sheet, 'A16', '');
-    setSheetRange(sheet);
+    const sheet = workbook.getWorksheet(player.sheetName) ?? workbook.addWorksheet(player.sheetName);
+    ensurePlayerSheetStructureExcel(sheet);
 
-    workbook.Sheets[player.sheetName] = sheet;
-    if (!workbook.SheetNames.includes(player.sheetName)) {
-      workbook.SheetNames.push(player.sheetName);
-    }
+    const roundRow = Math.max(FIRST_DATA_ROW, roundNumber + 1);
+    sheet.getCell(roundRow, COL_ROUND).value = roundNumber;
+    sheet.getCell(roundRow, COL_COLOR).value = '';
+    sheet.getCell(roundRow, COL_SUIT).value = '';
+    sheet.getCell(roundRow, COL_NUMBER).value = '';
+    sheet.getCell(roundRow, COL_LEVEL).value = '';
   }
 
-  await writeWorkbookWithRetry(workbookPath, workbook);
+  await writeWorkbookForWriteWithRetry(workbookPath, workbook);
 }
 
 export async function readWorkbookSnapshot(params: {
   workbookPath: string;
   players: Player[];
+  roundNumber: number;
 }): Promise<{ snapshot: WorkbookSnapshot; parseRetries: number }> {
-  const { workbookPath, players } = params;
+  const { workbookPath, players, roundNumber } = params;
   const { workbook, mtimeMs, retries } = await readWorkbookWithRetry(workbookPath);
 
   const submissions: Record<string, RawSheetSubmission> = {};
   for (const player of players) {
     const sheet = workbook.Sheets[player.sheetName];
+    const roundRow = sheet ? findRoundRow(sheet, roundNumber) : null;
+
+    if (!sheet || !roundRow) {
+      submissions[player.id] = {
+        currentRound: null,
+        color: '',
+        suit: '',
+        number: '',
+        level: '',
+        acceptedAt: '',
+        validationMessage: ''
+      };
+      continue;
+    }
+
     submissions[player.id] = {
-      scoringStatus: getCellString(sheet, 'A9').toUpperCase(),
-      roundCode: getCellString(sheet, 'A8').toUpperCase(),
-      currentRound: getCellNumber(sheet, 'A7'),
-      level: getCellString(sheet, 'A11').toUpperCase(),
-      guess: getCellString(sheet, 'A12').toUpperCase(),
-      submit: getCellString(sheet, 'A13').toUpperCase(),
-      acceptedAt: getCellString(sheet, 'A15'),
-      validationMessage: getCellString(sheet, 'A16')
+      currentRound: getCellNumber(sheet, roundRow, COL_ROUND),
+      color: getCellString(sheet, roundRow, COL_COLOR).toUpperCase(),
+      suit: getCellString(sheet, roundRow, COL_SUIT).toUpperCase(),
+      number: getCellString(sheet, roundRow, COL_NUMBER).toUpperCase(),
+      level: getCellString(sheet, roundRow, COL_LEVEL).toUpperCase(),
+      acceptedAt: '',
+      validationMessage: ''
     };
   }
 
@@ -266,32 +327,11 @@ export async function readWorkbookSnapshot(params: {
   };
 }
 
-export async function writeAcknowledgements(params: {
+export async function writeAcknowledgements(_params: {
   workbookPath: string;
   updates: Array<{ player: Player; acceptedAt?: string; validationMessage?: string }>;
 }): Promise<void> {
-  const { workbookPath, updates } = params;
-  if (updates.length === 0) {
-    return;
-  }
-
-  const workbook = await loadWorkbookOrCreate(workbookPath);
-
-  for (const entry of updates) {
-    const sheet = workbook.Sheets[entry.player.sheetName];
-    if (!sheet) {
-      continue;
-    }
-    if (entry.acceptedAt) {
-      ensureCell(sheet, 'A15', entry.acceptedAt);
-    }
-    if (entry.validationMessage !== undefined) {
-      ensureCell(sheet, 'A16', entry.validationMessage);
-    }
-    setSheetRange(sheet);
-  }
-
-  await writeWorkbookWithRetry(workbookPath, workbook);
+  // No-op by design for the column-only workbook format.
 }
 
 function normalizeName(raw: string): string {
@@ -401,7 +441,7 @@ export function lockAlert(message = 'Workbook currently locked; close Excel desk
 
 export function invalidSubmissionAlert(playerName: string, detail: string): WorkbookAlert {
   return {
-    id: `invalid-${normalizeName(playerName)}-${Date.now()}`,
+    id: `invalid-${normalizeName(playerName)}`,
     type: 'INVALID_SUBMISSION',
     message: `${playerName}: ${detail}`,
     createdAt: nowIso()

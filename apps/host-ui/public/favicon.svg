@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Chicken Vault icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f2b32" />
+      <stop offset="100%" stop-color="#172d18" />
+    </linearGradient>
+    <linearGradient id="vault" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#34d1bf" />
+      <stop offset="100%" stop-color="#ffd166" />
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)" />
+
+  <circle cx="32" cy="34" r="17" fill="none" stroke="url(#vault)" stroke-width="5" />
+  <circle cx="32" cy="34" r="3.2" fill="#f2f7f8" />
+  <line x1="32" y1="21" x2="32" y2="47" stroke="#f2f7f8" stroke-width="2.6" stroke-linecap="round" />
+  <line x1="19" y1="34" x2="45" y2="34" stroke="#f2f7f8" stroke-width="2.6" stroke-linecap="round" />
+
+  <path d="M22 19 L26 9 L30 19 Z" fill="#ffd166" />
+  <path d="M34 19 L38 9 L42 19 Z" fill="#ffd166" />
+</svg>

@@ -10,6 +10,7 @@
     "dev": "npm run build -w @chicken-vault/shared && concurrently -n shared,server,ui -c yellow,cyan,magenta \"npm run dev -w @chicken-vault/shared\" \"npm run dev -w @chicken-vault/server\" \"npm run dev -w @chicken-vault/host-ui\"",
     "build": "npm run build -w @chicken-vault/shared && npm run build -w @chicken-vault/server && npm run build -w @chicken-vault/host-ui",
     "test": "npm run test --workspaces --if-present",
+    "demo": "npm run simulate:demo -w @chicken-vault/server",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

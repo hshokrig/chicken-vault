@@ -8,12 +8,21 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:ai-live": "RUN_LIVE_AI_TESTS=true vitest run tests/aiLiveQuestions.test.ts",
+    "eval:ai": "tsx scripts/evaluateAiQuestions.ts",
+    "test:audio-generated": "tsx scripts/testAudioAnalyze.ts",
+    "simulate:e2e": "tsx scripts/simulateE2E.ts",
+    "simulate:demo": "tsx scripts/simulateE2E.ts --rounds 1 --players 8 --investigation-seconds 45 --turn-seconds 5 --scoring-seconds 20 --submission-delay-ms 1300",
+    "simulate:ai-live": "tsx scripts/simulateAiLiveGameplay.ts"
   },
   "dependencies": {
     "@chicken-vault/shared": "1.0.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "multer": "^2.0.2",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5",
     "zod": "^3.24.1"
@@ -21,8 +30,11 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.0.0",
     "@types/node": "^22.10.2",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
     "tsx": "^4.19.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.18"
   }
 }

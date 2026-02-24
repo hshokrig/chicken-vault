@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "shouldRespond": {
+      "type": "boolean",
+      "description": "Set true when the transcript contains one clear player question about hidden-card properties (color, suit, rank/value, face-card, ace, greater/less/equal comparisons). Do not default to false when there is a valid card question."
+    },
+    "editedQuestion": {
+      "type": "string",
+      "description": "Minimal cleanup of the same question text: remove filler/disfluencies while preserving meaning and structure. If shouldRespond is false, return empty string."
+    },
+    "answer": {
+      "description": "YES or NO only for valid card questions. Use only hidden-card facts. For rank/value semantics use A=1, J=11, Q=12, K=13. Return null when shouldRespond is false.",
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "YES",
+            "NO"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ignoreReason": {
+      "description": "Reason used when shouldRespond is false so dealer retries same turn. Use null when shouldRespond is true.",
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "NO_QUESTION",
+            "CHATTER",
+            "NOT_CARD_RELATED",
+            "UNCLEAR"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "shouldRespond",
+    "editedQuestion",
+    "answer",
+    "ignoreReason"
+  ]
+}

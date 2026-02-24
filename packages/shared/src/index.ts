@@ -10,6 +10,18 @@ export type GamePhase =
 
 export type QuestionAnswer = 'YES' | 'NO';
 
+export type AiQuestionStatus = 'RESOLVED' | 'RETRY';
+export type AiQuestionReason = 'OK' | 'NO_VALID_QUESTION' | 'MODEL_REFUSED' | 'ERROR';
+
+export interface AiQuestionOutcome {
+  status: AiQuestionStatus;
+  transcript: string;
+  editedQuestion: string | null;
+  answer: QuestionAnswer | null;
+  reason: AiQuestionReason;
+  latencyMs: number;
+}
+
 export type SubmissionLevel = 'SAFE' | 'MEDIUM' | 'BOLD';
 
 export type Suit = 'S' | 'H' | 'D' | 'C';
@@ -128,6 +140,13 @@ export interface WorkbookState {
   alerts: WorkbookAlert[];
 }
 
+export type DemoStatus = 'IDLE' | 'RUNNING' | 'READY_TO_START';
+
+export interface DemoState {
+  status: DemoStatus;
+  targetDurationSeconds: number;
+}
+
 export interface GameStatePublic {
   phase: GamePhase;
   config: GameConfig;
@@ -137,6 +156,7 @@ export interface GameStatePublic {
   teamScores: TeamTotals;
   history: RoundSummary[];
   workbook: WorkbookState;
+  demo: DemoState;
   lastActions: Record<string, string>;
 }
 

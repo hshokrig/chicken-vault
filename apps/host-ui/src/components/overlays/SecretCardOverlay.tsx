@@ -6,13 +6,13 @@ interface SecretCardOverlayProps {
   onSubmit: (card: string) => Promise<void>;
 }
 
-const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K'];
-const SUITS = ['S', 'H', 'D', 'C'];
+const CARD_RE = /^([A2-9TJQK])([SHDC])$/;
 
 export function SecretCardOverlay({ open, onClose, onSubmit }: SecretCardOverlayProps): JSX.Element | null {
-  const [rank, setRank] = useState('Q');
-  const [suit, setSuit] = useState('D');
+  const [cardCode, setCardCode] = useState('');
   const [saving, setSaving] = useState(false);
+  const normalized = cardCode.trim().toUpperCase();
+  const canSubmit = CARD_RE.test(normalized) && !saving;
 
   if (!open) {
     return null;
@@ -22,29 +22,17 @@ export function SecretCardOverlay({ open, onClose, onSubmit }: SecretCardOverlay
     <div className="overlay private-reveal">
       <div className="overlay-card">
         <h2>Dealer Private Entry</h2>
-        <p>Select the secret card for this round. This never appears on public host state.</p>
-        <div className="selector-row">
-          <label>
-            Rank
-            <select value={rank} onChange={(e) => setRank(e.target.value)}>
-              {RANKS.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Suit
-            <select value={suit} onChange={(e) => setSuit(e.target.value)}>
-              {SUITS.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <p>Enter card privately. Value is masked on screen and only printed in your host terminal.</p>
+        <label>
+          Secret Card (e.g. QD, 7S, AC)
+          <input
+            type="password"
+            value={cardCode}
+            onChange={(event) => setCardCode(event.target.value.toUpperCase())}
+            placeholder="QD"
+            autoFocus
+          />
+        </label>
         <div className="overlay-actions">
           <button type="button" className="ghost" onClick={onClose} disabled={saving}>
             Cancel
@@ -54,13 +42,14 @@ export function SecretCardOverlay({ open, onClose, onSubmit }: SecretCardOverlay
             onClick={async () => {
               setSaving(true);
               try {
-                await onSubmit(`${rank}${suit}`);
+                await onSubmit(normalized);
+                setCardCode('');
                 onClose();
               } finally {
                 setSaving(false);
               }
             }}
-            disabled={saving}
+            disabled={!canSubmit}
           >
             Save Secret Card
           </button>

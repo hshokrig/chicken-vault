@@ -28,7 +28,7 @@ export function makeState(): GameStatePublic {
       roundNumber: 1,
       dealerSeatIndex: 0,
       currentTurnSeatIndex: 1,
-      dealerId: 'p1',
+      dealerId: null,
       vaultValue: 4,
       calledBy: null,
       questions: [],
@@ -48,6 +48,10 @@ export function makeState(): GameStatePublic {
       activePath: '/tmp/chicken.xlsx',
       lastMtimeMs: null,
       alerts: []
+    },
+    demo: {
+      status: 'IDLE',
+      targetDurationSeconds: 60
     },
     lastActions: {}
   };

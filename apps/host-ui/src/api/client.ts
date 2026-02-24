@@ -1,10 +1,15 @@
-import { GameStatePublic, InsiderRevealPayload, Player, TeamId } from '@chicken-vault/shared';
+import { AiQuestionOutcome, GameStatePublic, Player, TeamId } from '@chicken-vault/shared';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  const isFormDataBody = init?.body instanceof FormData;
+
+  if (!isFormDataBody && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const response = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers,
     ...init
   });
 
@@ -39,21 +44,23 @@ export const api = {
       body: JSON.stringify({ playerIds })
     }),
   initializeWorkbook: () => request<GameStatePublic>('/api/workbook/initialize', { method: 'POST' }),
-  selectWorkbookPath: (path: string) =>
-    request<GameStatePublic>('/api/workbook/select-path', {
-      method: 'POST',
-      body: JSON.stringify({ path })
-    }),
   startGame: () => request<GameStatePublic>('/api/game/start', { method: 'POST' }),
-  setSecretCard: (card: string) =>
-    request<GameStatePublic>('/api/game/setup/secret-card', {
-      method: 'POST',
-      body: JSON.stringify({ card })
-    }),
-  pickInsider: () => request<InsiderRevealPayload>('/api/game/setup/pick-insider', { method: 'POST' }),
+  resetGame: () => request<GameStatePublic>('/api/game/reset', { method: 'POST' }),
+  startRealGame: () => request<GameStatePublic>('/api/game/start-real', { method: 'POST' }),
+  runDemo: () => request<GameStatePublic>('/api/game/demo/run', { method: 'POST' }),
   startInvestigation: () => request<GameStatePublic>('/api/game/setup/start-investigation', { method: 'POST' }),
   resolveQuestion: (payload: { question: string; answer: 'YES' | 'NO' }) =>
     request<GameStatePublic>('/api/game/investigation/resolve-question', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  analyzeQuestionAudio: (formData: FormData) =>
+    request<AiQuestionOutcome>('/api/game/investigation/analyze-question-audio', {
+      method: 'POST',
+      body: formData
+    }),
+  analyzeQuestionText: (payload: { transcript: string }) =>
+    request<AiQuestionOutcome>('/api/game/investigation/analyze-question-text', {
       method: 'POST',
       body: JSON.stringify(payload)
     }),

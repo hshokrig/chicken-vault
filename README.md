@@ -1,23 +1,15 @@
-# Chicken Vault! Host App
+# Chicken Vault! Dealer App
 
-Local host app for running the party game while screen-sharing. Players do **not** run this app and submit only by editing a shared Excel workbook in Excel Web.
+Dealer web app for running Chicken Vault while screen-sharing. The dealer is the host (not a player). Players do not run this app; they only edit the shared workbook.
 
-## Hard Requirements (Do This Before Session)
+## Requirements
 
-1. Put the workbook inside the host machine's OneDrive-synced folder.
-2. Right-click the workbook in Finder/Explorer and set **Always keep on this device**.
-3. Keep the workbook closed in desktop Excel during the game.
+- Node.js 20+ and npm
+- A browser with microphone support (Chrome/Edge recommended)
+- Shared workbook exists locally and is configured by `ONE_DRIVE_XLSX_PATH` in `.env`
+- OpenAI API key in `.env`
 
-If #2 or #3 is violated, OneDrive/Excel can create conflict copies or lock the file, which breaks polling and optional write acknowledgements.
-
-## Stack
-
-- Frontend: React + Vite + TypeScript
-- Backend: Node.js + TypeScript + Express
-- Realtime host updates: Socket.IO
-- Excel read/write: SheetJS (`xlsx`) with buffer-based reads (`fs.readFile`) to avoid persistent file locks
-
-## Quick Start
+## Install and Run
 
 1. Install dependencies:
 
@@ -25,91 +17,100 @@ If #2 or #3 is violated, OneDrive/Excel can create conflict copies or lock the f
 npm install
 ```
 
-2. Create env file:
+2. Create local env:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Set `ONE_DRIVE_XLSX_PATH` in `.env` to your local OneDrive workbook path.
+3. Fill `.env`:
 
-4. Start dev servers:
+- `PORT` (optional, default `4000`)
+- `ONE_DRIVE_XLSX_PATH` (required absolute/local path to the shared `.xlsx` file)
+- `ACK_WRITES_ENABLED` (`true` or `false`)
+- `OPENAI_API_KEY` (required)
+- `OPENAI_TRANSCRIBE_MODEL` (default `gpt-4o-transcribe`)
+- `OPENAI_QUESTION_MODEL` (default `gpt-5-nano`)
+- `OPENAI_TRANSCRIBE_LANGUAGE` (optional)
+- `ENABLE_AI_TEXT_TEST_ENDPOINT` (`false` for normal use)
+
+Workbook path is env-locked: runtime UI/API overrides are disabled.
+
+4. Start app:
 
 ```bash
 npm run dev
 ```
 
-- Backend: `http://localhost:4000`
+5. Open:
+
 - Host UI: `http://localhost:5173`
+- Backend API: `http://localhost:4000`
 
-## Host Flow
+## What Dealer (Host) Should Do
 
-1. Open host UI.
-2. In Lobby, complete preflight checklist (local availability + desktop Excel closed).
-3. Add players, assign team A/B, drag seat order.
-4. Set config, Excel path, and optional share URL.
-5. Click **Initialize Workbook Now** (creates/refreshes player sheets).
-6. Click **Start Game**.
-7. Setup each round: enter secret card, optionally pick insider (private 5s blackout overlay), start investigation.
-8. Investigation: log Q + YES/NO, or call vault.
-9. Scoring: players submit in workbook; backend polls every 2s.
-10. Reveal: review points and continue next round.
+### Before players join
 
-## Player Submission Instructions
+1. Run `npm run dev`.
+2. Open `http://localhost:5173`.
+3. In Lobby, add all players and assign teams.
+4. Click `Save Config` (this initializes workbook immediately when players exist).
+5. `Initialize Workbook Now` always resets the shared workbook tabs: all existing tabs are deleted and recreated only for current players.
+6. Click `Start Real Game`.
+7. Dealer position is randomly assigned between two players each round.
 
-Players edit only their assigned worksheet:
+### At start of each round (SETUP)
 
-- Fill `A11` Level: `SAFE` / `MEDIUM` / `BOLD`
-- Fill `A12` Guess:
-  - SAFE: `RED` or `BLACK`
-  - MEDIUM: `S` / `H` / `D` / `C`
-  - BOLD: exact card code (`QD`, `7S`, `AC`, etc.)
-- Type `YES` in `A13` Submit as final commit
+1. Confirm the UI dealer marker (between two seats).
+2. Click `Start Investigation`.
+3. Server auto-selects:
+   - Secret card (random, logged only in server terminal)
+   - Insider (random, when insider mode is enabled)
+4. Turn starts clockwise from dealer marker.
 
-Backend accepts only submissions with:
+### During investigation
 
-- `A9` = `OPEN`
-- `A8` RoundCode matching current round
-- `A13` = `YES`
-- Valid Level/Guess format
+1. Press `ASK` to start recording.
+2. Let current player ask one question.
+3. Press `Submit` to stop recording and analyze.
+4. Wait for `Analyzing...`.
+5. System auto-transcribes + auto-answers YES/NO and rotates turn.
+6. If result is chatter/noise, turn does not advance; repeat ASK/Submit.
+7. If current player calls vault, click `Call Vault (Current Turn)`.
+8. To reset the whole game back to Lobby at any time, press `Shift+R` (confirmation required).
 
-## Workbook Contract
+### During scoring
 
-One sheet per player named `P##_Name` (sanitized, unique, max 31 chars). Backend initializes these fixed cells:
+1. Watch `Submission Tracker`.
+2. Wait until all players submit in Excel or timer ends.
 
-- `A1`: `CHICKEN VAULT — EDIT ONLY THIS SHEET`
-- `A3`: PlayerName
-- `A4`: Team (`A`/`B`)
-- `A5`: SeatIndex (zero-based)
-- `A7`: CurrentRound
-- `A8`: RoundCode
-- `A9`: ScoringStatus (`OPEN`/`CLOSED`)
-- `A11`: Level (player)
-- `A12`: Guess (player)
-- `A13`: Submit (`YES` by player)
-- `A15`: AcceptedAt (optional backend ack)
-- `A16`: ValidationMessage (optional backend ack)
+### During reveal
 
-Template workbook included at [docs/chicken-vaults.xlsx](/Users/eshohos/Library/CloudStorage/OneDrive-Ericsson/chicken-vault/docs/chicken-vaults.xlsx).
+1. Review results.
+2. Click `Next Round` until game is done.
 
-## Dealer / Turn Conventions (Locked)
+## What Players Should Do
 
-- Internal seat indexing is zero-based.
-- Round 1 dealer is seat `0`.
-- Dealer rotates clockwise each round.
-- Investigation always starts at seat immediately after dealer.
+Players only edit their own sheet in `chicken-vaults.xlsx`.
 
-## Conflict / Sync Handling
+For each scoring phase:
 
-The backend continuously checks for sync anomalies:
+1. Find the row for the current round in column `Round` (column `A`).
+2. Use dropdown lists in `Color`, `Suits`, `Number`, and `Level` columns (avoid free text).
+3. Set `Level` (column `E`) to one of `SAFE`, `MEDIUM`, `BOLD`.
+4. Fill exactly one guess column:
+   - `SAFE`: use `Color` (column `B`) with `RED` or `BLACK`
+   - `MEDIUM`: use `Suits` (column `C`) with `S`, `H`, `D`, or `C`
+   - `BOLD`: use `Number` (column `D`) as rank (`A, 2-10, J, Q, K`) and `Suits` (column `C`) as `S/H/D/C`
 
-- Missing configured path
-- Newer similarly named `.xlsx` files (possible conflict copies)
-- Stale mtime during scoring (possible paused sync / online-only file)
-- Transient parse retries during partial sync writes
-- Lock errors during write attempts
+## AI Question Flow
 
-When detected, the UI shows warning banners and candidate file path buttons so host can pick the active file.
+- Audio transcription model: `gpt-4o-transcribe`
+- Question reasoning model: `gpt-5-nano` (Chat Completions with structured schema)
+- Output contains:
+  - cleaned question text
+  - YES/NO answer
+  - retry reason when no valid question is detected
 
 ## Commands
 
@@ -117,17 +118,19 @@ When detected, the UI shows warning banners and candidate file path buttons so h
 npm run typecheck
 npm test
 npm run build
+npm run eval:ai -w @chicken-vault/server
+npm run test:ai-live -w @chicken-vault/server
+npm run simulate:ai-live -w @chicken-vault/server
 ```
 
 ## Troubleshooting
 
-- **No submissions arriving**:
-  - Confirm OneDrive is syncing and not paused.
-  - Confirm workbook is **Always keep on this device** (not online-only).
-  - Confirm players are editing the correct shared workbook.
-- **Workbook lock warning**:
-  - Close desktop Excel on host machine.
-  - Wait for OneDrive sync to settle and retry.
-- **Conflict copy warning**:
-  - Use UI candidate buttons to select active local file.
-  - Re-share correct workbook link with players if needed.
+- `Workbook path` errors:
+  - Set `ONE_DRIVE_XLSX_PATH` in `.env` to an existing local `.xlsx` file.
+- Microphone errors:
+  - Allow browser mic access for `localhost:5173`.
+- AI analysis errors:
+  - Verify `OPENAI_API_KEY` in `.env`.
+  - Check backend logs for OpenAI errors.
+- Question keeps retrying:
+  - Ask one clear card-related question in each recording.

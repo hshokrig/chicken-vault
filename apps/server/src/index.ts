@@ -5,6 +5,9 @@ import { Server } from 'socket.io';
 import { ToastEvent } from '@chicken-vault/shared';
 import { GameEngine } from './game/gameEngine.js';
 import { createHttpRouter } from './routes/http.js';
+import { loadEnv } from './utils/env.js';
+
+loadEnv();
 
 const app = express();
 const server = http.createServer(app);
@@ -51,6 +54,21 @@ const port = Number(process.env.PORT ?? 4000);
 server.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Chicken Vault server listening on http://localhost:${port}`);
+});
+
+server.on('error', (error) => {
+  // eslint-disable-next-line no-console
+  console.error('[server] HTTP server error:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error('[server] Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  // eslint-disable-next-line no-console
+  console.error('[server] Uncaught exception:', error);
 });
 
 const shutdown = () => {
